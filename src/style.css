@@ -128,10 +128,18 @@ td input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #78d6c133; }
 .map-panel { margin-top: 24px; }
 .map-head { align-items: center; }
 .map-calibration { color: #f0d391; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.map-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.map-head-actions .secondary { padding: 7px 12px; font-size: 12px; }
 #map { width: 100%; height: min(58vh, 560px); min-height: 340px; background: #172126; }
+/* Dynamic viewport units keep the map from hiding under the browser bars on a phone. The
+   mobile block below still wins on narrow screens, so it stays 360px there. */
+@supports (height: 100dvh) {
+  #map { height: min(58dvh, 560px); }
+}
 .map-status { margin: 0; padding: 10px 20px 0; color: #dbe8e4; font-size: 12px; }
 .map-note { margin: 0; padding: 10px 20px 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.numbered-map-marker { display: grid; place-items: center; border: 2px solid #f0c76b; border-radius: 50%; background: #287d70; color: #f5f7f2; font: 800 12px/1 system-ui, sans-serif; box-shadow: 0 2px 8px #0009; }
+.numbered-map-marker { display: grid; place-items: center; border: 1px solid #fff; border-radius: 50%; background: #d32f2f; color: #fff; font: 800 8px/1 system-ui, sans-serif; box-shadow: 0 1px 3px #0009; }
+.numbered-map-marker:hover { background: #f0453c; }
 [hidden] { display: none !important; }
 .leaflet-control-attribution { background: #172126eF !important; color: #d3dfdc !important; }
 .leaflet-control-attribution a { color: #8edac5 !important; }
@@ -153,14 +161,64 @@ td input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #78d6c133; }
 footer { text-align: center; color: #b4c2c1; border-top: 1px solid #334248; padding: 21px; font-size: 11px; margin-top: 30px; }
 
 @media (max-width: 700px) {
-  header { padding: 0 16px; }
+  header {
+    height: auto;
+    min-height: 58px;
+    gap: 10px;
+    padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+  }
+  .brand { gap: 9px; min-width: 0; }
+  .brand strong { font-size: 15px; }
   .brand small { display: none; }
-  main { padding: 32px 14px 16px; }
-  .panel-head { display: block; padding: 19px 14px 14px; }
-  .actions { justify-content: flex-start; margin-top: 14px; }
-  .map-calibration { display: inline-block; margin-top: 10px; white-space: normal; }
-  #map { height: 360px; min-height: 300px; }
-  .map-note { padding: 12px 14px 15px; }
+  .mark { width: 32px; height: 32px; font-size: 20px; border-radius: 9px; }
+  .status { font-size: 11px; padding: 6px 9px; white-space: nowrap; }
+  main { padding: 30px max(14px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
   .hero h1 { font-size: 33px; }
-  nav { padding-top: 25px; }
+  .hero > p:last-child { font-size: 15px; }
+  nav {
+    gap: 6px;
+    margin: 0 -14px;
+    padding: 25px 14px 14px;
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+  .mode { padding: 10px 12px; font-size: 12px; }
+  .panel { border-radius: 13px; }
+  .panel-head { display: block; padding: 18px 14px 14px; }
+  .panel h2 { font-size: 18px; }
+  .actions { justify-content: flex-start; margin-top: 12px; }
+  /* 620px keeps every column readable while the table still scrolls sideways. */
+  table { min-width: 620px; }
+  th { padding: 10px 9px; font-size: 10px; }
+  td { padding: 6px 9px; font-size: 12px; }
+  td:first-child { width: 32px; }
+  /* 16px is the threshold below which iOS Safari zooms the page when a field is focused. */
+  td input { padding: 8px; font-size: 16px; }
+  .out { font-size: 12px; }
+  .icon { font-size: 22px; padding: 4px 6px; }
+  .add {
+    display: block;
+    width: calc(100% - 28px);
+    margin: 14px;
+    padding: 12px 0;
+    text-align: center;
+    background: #1d292f;
+    border-radius: 9px;
+  }
+  .map-panel { margin-top: 18px; }
+  .map-head-actions { margin-top: 12px; width: 100%; gap: 8px; }
+  .map-head-actions .secondary { width: 100%; padding: 11px 12px; }
+  .map-calibration { display: block; margin-top: 8px; white-space: normal; }
+  #map { height: 360px; min-height: 300px; }
+  .map-status { padding: 10px 14px 0; }
+  .map-note { padding: 10px 14px 14px; }
+  .note { padding-left: 13px; }
+  footer { padding: 18px 14px calc(18px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 420px) {
+  .hero h1 { font-size: 29px; }
+  .mode { padding: 9px 11px; }
+  table { min-width: 560px; }
+  #map { height: 320px; min-height: 260px; }
 }

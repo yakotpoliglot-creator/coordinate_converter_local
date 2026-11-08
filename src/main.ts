@@ -37,6 +37,17 @@ let previousMapPointCount = 0
 // Which basemap is on screen decides the registration: the Esri imagery and the OSM
 // scheme sit about eight metres apart here, so the marker shift follows the basemap.
 let basemap: BasemapId = 'satellite'
+// Map marks: a small red disc with the row number inside. The size is shared with the
+// canvas export, so the saved picture matches what is on screen.
+const MARKER_SIZE = 14
+const MARKER_COLOR = '#d32f2f'
+const MAP_BACKGROUND = '#172126'
+// Kept so the picture export can repaint the same tile layers that are switched on.
+const tileLayers: { satellite: L.TileLayer | null; overlay: L.TileLayer | null; scheme: L.TileLayer | null } = {
+  satellite: null,
+  overlay: null,
+  scheme: null
+}
 
 function number(value: string, title: string): number {
   const n = Number(value.trim().replace(',', '.').replace(/\s/g, ''))
@@ -133,7 +144,7 @@ function render() {
       <div class="table-scroll"><table><thead><tr><th>№</th><th>${info.first}</th><th>${info.second}</th><th>${info.out1}</th><th>${info.out2}</th><th></th></tr></thead><tbody>${resultRows}</tbody></table></div>
       <button id="add" class="add">＋ Добавить строку</button></section>
       <section class="map-panel panel" aria-label="Карта точек">
-        <div class="panel-head map-head"><div><h2>Точки на карте Севастополя</h2><p>Маркеры соответствуют заполненным строкам таблицы.</p></div><span class="map-calibration" id="map-calibration"></span></div>
+        <div class="panel-head map-head"><div><h2>Точки на карте Севастополя</h2><p>Маркеры соответствуют заполненным строкам таблицы.</p></div><div class="map-head-actions"><span class="map-calibration" id="map-calibration"></span><button id="map-download" class="secondary" type="button">Скачать картинку</button></div></div>
         <div id="map" role="application" aria-label="Интерактивная карта Севастополя"></div>
         <p id="map-status" class="map-status" aria-live="polite">Нет заполненных точек.</p>
         <p class="map-note">Привязка только для карты и не влияет на результаты конвертера, и она переключается вместе с подложкой, потому что подложки смещены друг относительно друга примерно на восемь метров. Для спутниковых снимков Esri сдвиг измерен в QGIS/GDAL по ортофотопланам МСК-42 «Севастополь»: 14 замеров по городу (пять точек на двух зумах и шесть случайных планшетов) дали одинаковое смещение с медианой +5,1 м восток и +6,0 м север, разброс около 1 м, без разворота и масштаба. Для схемы OSM сдвиг измерен наложением береговой линии чертежа «границы севастополя.dxf»: +0,6 м восток и +0,2 м север при разбросе около 2 м. Подложки загружаются из интернета; без сети вычисления работают, но карта может быть пустой.</p>
@@ -151,15 +162,17 @@ function setupMap() {
 
   const osmAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   // Satellite imagery: no key needed, real coverage down to z19 over the city.
+  // crossOrigin lets the canvas export draw these tiles into a saved PNG.
   const satellite = L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    { maxZoom: 19, attribution: 'Снимки &copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics' }
+    { maxZoom: 19, crossOrigin: true, attribution: 'Снимки &copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics' }
   )
   // Streets and place names drawn over the imagery: OSM keeps Russian names at every
   // zoom, which the Esri label service does not offer above z15 here.
   const overlay = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     subdomains: 'abc',
     maxZoom: 19,
+    crossOrigin: true,
     opacity: 0.5,
     className: 'map-overlay-tile',
     attribution: osmAttribution
@@ -167,13 +180,19 @@ function setupMap() {
   const scheme = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     subdomains: 'abc',
     maxZoom: 19,
+    crossOrigin: true,
     className: 'map-scheme-tile',
     attribution: osmAttribution
   })
 
   satellite.addTo(map)
   overlay.addTo(map)
-  L.control.layers({ 'Спутник': satellite, 'Схема OSM': scheme }, { 'Улицы и подписи': overlay }, { collapsed: false, position: 'topright' }).addTo(map)
+  tileLayers.satellite = satellite
+  tileLayers.overlay = overlay
+  tileLayers.scheme = scheme
+  // On a phone the expanded switcher would cover most of the map, so it starts folded there.
+  const narrowScreen = window.matchMedia('(max-width: 700px)').matches
+  L.control.layers({ 'Спутник': satellite, 'Схема OSM': scheme }, { 'Улицы и подписи': overlay }, { collapsed: narrowScreen, position: 'topright' }).addTo(map)
   // Switching the basemap switches the registration, so the markers are recomputed
   // against whatever imagery is actually on screen.
   map.on('baselayerchange', event => {
@@ -184,13 +203,12 @@ function setupMap() {
 
   markerLayer = L.layerGroup().addTo(map)
   window.setTimeout(() => map?.invalidateSize(), 0)
+  document.querySelector<HTMLButtonElement>('#map-download')?.addEventListener('click', () => { void downloadMapImage() })
   updateCalibrationLabel()
   updateMapMarkers(true)
 }
 
-function updateMapMarkers(forceFit = false) {
-  if (!map || !markerLayer) return
-  markerLayer.clearLayers()
+function collectMapPoints(): MapPoint[] {
   const points: MapPoint[] = []
   rows.forEach((row, index) => {
     try {
@@ -198,8 +216,193 @@ function updateMapMarkers(forceFit = false) {
       if (point && Number.isFinite(point.lat) && Number.isFinite(point.lon)) points.push(point)
     } catch { /* Invalid/incomplete rows are omitted from the map until corrected. */ }
   })
+  return points
+}
+
+type ExportLayer = { layer: L.TileLayer; opacity: number; filter: string }
+
+/** Reads a filter from the stylesheet instead of repeating it here, so the exported
+ *  picture cannot drift away from what the map itself shows. */
+function classFilter(className: string): string {
+  if (!className) return 'none'
+  const probe = document.createElement('div')
+  probe.className = className
+  probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden'
+  document.body.appendChild(probe)
+  const filter = window.getComputedStyle(probe).filter
+  probe.remove()
+  return filter && filter !== 'none' ? filter : 'none'
+}
+
+/** Tile layers to paint, in map order: basemap, then the label overlay or the scheme. */
+function exportLayers(): ExportLayer[] {
+  if (!map) return []
+  const candidates: Array<[L.TileLayer | null, string]> = [
+    [tileLayers.satellite, ''],
+    [tileLayers.overlay, 'map-overlay-tile'],
+    [tileLayers.scheme, 'map-scheme-tile']
+  ]
+  const active: ExportLayer[] = []
+  candidates.forEach(([layer, className]) => {
+    if (!layer || !map!.hasLayer(layer)) return
+    active.push({ layer, opacity: layer.options.opacity ?? 1, filter: classFilter(className) })
+  })
+  return active
+}
+
+/** Leaflet animates zooms and pans, and during those the map still reports the previous
+ *  zoom in its layers; wait for the animation classes to go before measuring the view. */
+async function whenSettled(timeout = 3000) {
+  if (!map) return
+  const container = map.getContainer()
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if (!container.querySelector('.leaflet-zoom-anim, .leaflet-pan-anim')) return
+    await new Promise<void>(resolve => { window.setTimeout(resolve, 60) })
+  }
+}
+
+/** Tiles are requested by URL and placed from the map geometry rather than copied from the
+ *  <img> elements on screen: Leaflet keeps freshly loaded tiles at opacity 0 while they
+ *  fade in and scales the previous zoom level while it animates, which is how the download
+ *  used to come out with an empty basemap. */
+async function drawTileLayer(context: CanvasRenderingContext2D, entry: ExportLayer, view: L.Point) {
+  if (!map) return
+  const zoom = map.getZoom()
+  const size = entry.layer.getTileSize()
+  const bounds = map.getPixelBounds()
+  const topLeft = bounds.min
+  const bottomRight = bounds.max
+  if (!topLeft || !bottomRight) return
+  const first = topLeft.divideBy(size.x).floor()
+  const last = bottomRight.divideBy(size.x).floor()
+  const pending: Array<Promise<void>> = []
+  for (let x = first.x; x <= last.x; x++) {
+    for (let y = first.y; y <= last.y; y++) {
+      const corner = map.latLngToContainerPoint(map.unproject(L.point(x * size.x, y * size.y), zoom))
+      const left = Math.round(corner.x)
+      const top = Math.round(corner.y)
+      if (left + size.x <= 0 || top + size.y <= 0 || left >= view.x || top >= view.y) continue
+      const coords = L.point(x, y) as L.Coords
+      coords.z = zoom
+      const url = entry.layer.getTileUrl(coords)
+      pending.push(new Promise<void>(resolve => {
+        const image = new Image()
+        image.crossOrigin = 'anonymous'
+        image.onload = () => {
+          context.globalAlpha = entry.opacity
+          context.filter = entry.filter
+          context.drawImage(image, left, top, size.x, size.y)
+          resolve()
+        }
+        image.onerror = () => resolve()
+        image.src = url
+      }))
+    }
+  }
+  await Promise.all(pending)
+}
+
+async function downloadMapImage() {
+  const status = document.querySelector<HTMLParagraphElement>('#map-status')
+  const button = document.querySelector<HTMLButtonElement>('#map-download')
+  if (!map) return
+  button?.setAttribute('disabled', '')
+  const report = (message: string) => {
+    if (!status) return
+    status.textContent = message
+    window.setTimeout(() => {
+      const count = collectMapPoints().length
+      status.textContent = count ? `На карте отмечено точек: ${count}.` : 'Нет корректно заполненных точек.'
+    }, 6000)
+  }
+  try {
+    if (status) status.textContent = 'Готовлю картинку…'
+    await whenSettled()
+    const view = map.getSize()
+    const points = collectMapPoints()
+    // Render at the display density so marker numbers and labels stay sharp.
+    const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(view.x * scale)
+    canvas.height = Math.round(view.y * scale)
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Canvas недоступен')
+    context.setTransform(scale, 0, 0, scale, 0, 0)
+    context.fillStyle = MAP_BACKGROUND
+    context.fillRect(0, 0, view.x, view.y)
+
+    for (const entry of exportLayers()) await drawTileLayer(context, entry, view)
+    context.globalAlpha = 1
+    context.filter = 'none'
+
+    points.forEach(point => {
+      const position = map!.latLngToContainerPoint([point.lat, point.lon])
+      drawMapMark(context, position.x, position.y, String(point.row))
+    })
+    drawMapFooter(context, view.x, view.y, points.length)
+
+    const blob = await new Promise<Blob | null>(resolve => { canvas.toBlob(value => resolve(value), 'image/png') })
+    if (!blob) throw new Error('браузер не собрал PNG')
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `sevastopol-points-${stamp}.png`
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 10000)
+    report(`Картинка сохранена: ${points.length ? `точек ${points.length}` : 'без точек'} · ${canvas.width}×${canvas.height} px.`)
+  } catch (cause) {
+    report(`Не удалось сохранить картинку: ${cause instanceof Error ? cause.message : 'неизвестная ошибка'}`)
+  } finally {
+    button?.removeAttribute('disabled')
+  }
+}
+
+/** Same look as the on-screen `.numbered-map-marker`, drawn for the exported PNG. */
+function drawMapMark(context: CanvasRenderingContext2D, x: number, y: number, label: string) {
+  const radius = MARKER_SIZE / 2
+  context.save()
+  context.shadowColor = 'rgba(0, 0, 0, 0.55)'
+  context.shadowBlur = 4
+  context.beginPath()
+  context.arc(x, y, radius, 0, Math.PI * 2)
+  context.fillStyle = MARKER_COLOR
+  context.fill()
+  context.restore()
+  context.beginPath()
+  context.arc(x, y, radius - 0.5, 0, Math.PI * 2)
+  context.lineWidth = 1
+  context.strokeStyle = '#ffffff'
+  context.stroke()
+  context.fillStyle = '#ffffff'
+  context.font = '800 8px system-ui, sans-serif'
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillText(label, x, y + 0.5)
+}
+
+function drawMapFooter(context: CanvasRenderingContext2D, width: number, height: number, count: number) {
+  const bar = 30
+  const offset = mapCalibration[basemap]
+  const source = basemap === 'satellite' ? 'спутник Esri' : 'схема OSM'
+  const stamp = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  context.fillStyle = 'rgba(10, 20, 24, 0.74)'
+  context.fillRect(0, height - bar, width, bar)
+  context.textAlign = 'left'
+  context.textBaseline = 'alphabetic'
+  context.font = '600 9px system-ui, sans-serif'
+  context.fillStyle = '#e8f2ef'
+  context.fillText('Снимки © Esri, Maxar, Earthstar Geographics · Подписи © OpenStreetMap contributors · Leaflet', 10, height - bar + 12)
+  context.fillStyle = '#a9c4bd'
+  context.fillText(`Конвертер координат, Севастополь · ${stamp} · точек: ${count} · привязка ${source}: ${signedMetres(offset.east)} м E / ${signedMetres(offset.north)} м N`, 10, height - bar + 24)
+}
+
+function updateMapMarkers(forceFit = false) {
+  if (!map || !markerLayer) return
+  markerLayer.clearLayers()
+  const points = collectMapPoints()
   points.forEach(point => {
-    const icon = L.divIcon({ className: 'numbered-map-marker', html: String(point.row), iconSize: [28, 28], iconAnchor: [14, 14] })
+    const icon = L.divIcon({ className: 'numbered-map-marker', html: String(point.row), iconSize: [MARKER_SIZE, MARKER_SIZE], iconAnchor: [MARKER_SIZE / 2, MARKER_SIZE / 2] })
     L.marker([point.lat, point.lon], { icon, title: `Точка ${point.row}` })
       .bindTooltip(`Точка ${point.row}`)
       .bindPopup(`<b>Точка ${point.row}</b><br>${point.lat.toFixed(8)}°, ${point.lon.toFixed(8)}°`)
