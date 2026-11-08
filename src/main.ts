@@ -74,7 +74,19 @@ function render() {
 
 function bind() {
   document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => button.onclick = () => { mode = button.dataset.mode as Mode; render() })
-  document.querySelectorAll<HTMLInputElement>('input[data-id]').forEach(input => input.oninput = () => { const row = rows.find(r => r.id === Number(input.dataset.id)); if (row) row[input.dataset.key as 'first' | 'second'] = input.value; render() })
+  document.querySelectorAll<HTMLInputElement>('input[data-id]').forEach(input => input.oninput = () => {
+    const row = rows.find(r => r.id === Number(input.dataset.id))
+    if (!row) return
+    row[input.dataset.key as 'first' | 'second'] = input.value
+    const caret = input.selectionStart
+    const id = input.dataset.id, key = input.dataset.key
+    render()
+    const next = document.querySelector<HTMLInputElement>(`input[data-id="${id}"][data-key="${key}"]`)
+    if (next) {
+      next.focus()
+      if (caret !== null) next.setSelectionRange(caret, caret)
+    }
+  })
   document.querySelectorAll<HTMLButtonElement>('[data-remove]').forEach(button => button.onclick = () => { rows = rows.filter(r => r.id !== Number(button.dataset.remove)); if (!rows.length) rows = [{ id: id++, first: '', second: '' }]; render() })
   document.querySelector<HTMLButtonElement>('#add')!.onclick = () => { rows.push({ id: id++, first: '', second: '' }); render() }
   document.querySelector<HTMLButtonElement>('#clear')!.onclick = () => { rows = [{ id: id++, first: '', second: '' }]; render() }

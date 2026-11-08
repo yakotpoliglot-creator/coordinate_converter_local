@@ -24,6 +24,16 @@ function parameters(e: Ellipsoid) {
 
 function meridianArc(latitude: number, e: Ellipsoid): number {
   const { e2 } = parameters(e)
+  if (e === krasovsky) {
+    // Coefficients B9:B13 from the workbook (the same meridian-arc series).
+    return e.a * (1 - e2) * (
+      1.0050517738936318 * latitude
+      - 2.5311888225321333e-3 * Math.sin(2 * latitude)
+      + 2.6561302594640805e-6 * Math.sin(4 * latitude)
+      - 3.4680326628417235e-9 * Math.sin(6 * latitude)
+      + 4.8238451370543164e-12 * Math.sin(8 * latitude)
+    )
+  }
   const e4 = e2 * e2
   const e6 = e4 * e2
   const b0 = 1 - e2 / 4 - (3 * e4) / 64 - (5 * e6) / 256
@@ -111,12 +121,8 @@ function geocentricToGeodetic([x, y, z]: [number, number, number], e: Ellipsoid)
   const { e2 } = parameters(e)
   const p = Math.hypot(x, y)
   let b = Math.atan2(z, p * (1 - e2))
-  for (let i = 0; i < 8; i++) {
-    const n = e.a / Math.sqrt(1 - e2 * Math.sin(b) ** 2)
-    b = Math.atan2(z, p * (1 - e2 * n / (n + 0)))
-  }
   // Stable fixed-point expression with zero ellipsoidal height (the convention of the workbook).
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 8; i++) {
     const n = e.a / Math.sqrt(1 - e2 * Math.sin(b) ** 2)
     b = Math.atan2(z + e2 * n * Math.sin(b), p)
   }
