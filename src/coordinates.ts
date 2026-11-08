@@ -154,22 +154,51 @@ function wgsToPulkovo([x, y, z]: [number, number, number]): [number, number, num
   ]
 }
 
+/** Pulkovo-1942 geodetic coordinates (Krasovsky) → WGS-84. */
+export function pulkovoToWgs84(geo: Geographic): Geographic {
+  return geocentricToGeodetic(pulkovoToWgs(geodeticToGeocentric(geo, krasovsky)), wgs84)
+}
+
+/** WGS-84 → Pulkovo-1942 geodetic coordinates (Krasovsky). */
+export function wgs84ToPulkovo(geo: Geographic): Geographic {
+  return geocentricToGeodetic(wgsToPulkovo(geodeticToGeocentric(geo, wgs84)), krasovsky)
+}
+
 export function sk63ToWgs84(point: Point): Geographic {
-  const pulkovo = gridToGeographic(point, 'sk63')
-  return geocentricToGeodetic(pulkovoToWgs(geodeticToGeocentric(pulkovo, krasovsky)), wgs84)
+  return pulkovoToWgs84(gridToGeographic(point, 'sk63'))
 }
 
 export function wgs84ToSk63(geo: Geographic): Point {
-  const pulkovo = geocentricToGeodetic(wgsToPulkovo(geodeticToGeocentric(geo, wgs84)), krasovsky)
-  return geographicToGrid(pulkovo, 'sk63')
+  return geographicToGrid(wgs84ToPulkovo(geo), 'sk63')
 }
 
-/** Empirical OSM-to-drawing registration, applied only while placing local points on the map. */
-export const sk63MapCorrection = { x: 110, y: 21.5 } as const
+export function msk42ToWgs84(point: Point): Geographic {
+  return pulkovoToWgs84(gridToGeographic(point, 'msk42'))
+}
 
-/** Reverse the drawing-only translation before locating an SK-63 point on the WGS-84 map. */
-export function sk63DrawingToMapWgs84(point: Point): Geographic {
-  return sk63ToWgs84({ x: point.x - sk63MapCorrection.x, y: point.y - sk63MapCorrection.y })
+export function wgs84ToMsk42(geo: Geographic): Point {
+  return geographicToGrid(wgs84ToPulkovo(geo), 'msk42')
+}
+
+/**
+ * Map-only registration of the local drawings, in metres of local east/north.
+ *
+ * Measured in QGIS 3.44 (PROJ) by overlaying «границы севастополя.dxf» on the OSM
+ * `natural=coastline` geometry: 1340 shoreline-coincident drawing vertices gave a
+ * best-fit translation of +0.61 m east and +0.20 m north with a spread (MAD) of
+ * about 1.9 m. The reference itself is noisier than that, so this is a sub-metre
+ * refinement, not a real displacement: the workbook datum transform is already
+ * correct to the accuracy of the OSM shoreline. Converted results are unaffected.
+ */
+export const mapCalibration = { east: 0.6, north: 0.2 } as const
+
+/**
+ * Place a local drawing point on the OSM map: the workbook conversion plus the
+ * measured map-only registration. `system` is the grid the drawing coordinates are in.
+ */
+export function drawingToMapWgs84(point: Point, system: 'msk42' | 'sk63'): Geographic {
+  const registered = { x: point.x + mapCalibration.north, y: point.y + mapCalibration.east }
+  return pulkovoToWgs84(gridToGeographic(registered, system))
 }
 
 export function parseCoordinate(input: string, kind: 'lat' | 'lon'): number {

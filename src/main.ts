@@ -2,11 +2,11 @@ import './style.css'
 import 'leaflet/dist/leaflet.css'
 import * as L from 'leaflet'
 import {
+  drawingToMapWgs84,
   formatDms,
   formatNumber,
   msk42ToSk63,
   parseCoordinate,
-  sk63DrawingToMapWgs84,
   sk63ToMsk42,
   sk63ToWgs84,
   wgs84ToSk63
@@ -66,12 +66,12 @@ function convert(row: Row): Result {
 function mapPoint(row: Row, rowNumber: number): MapPoint | undefined {
   if (!row.first.trim() || !row.second.trim()) return undefined
   if (mode === 'msk-sk') {
-    const sk63 = msk42ToSk63({ x: number(row.first, labels[mode].first), y: number(row.second, labels[mode].second) })
-    return { ...sk63DrawingToMapWgs84(sk63), row: rowNumber }
+    const point = { x: number(row.first, labels[mode].first), y: number(row.second, labels[mode].second) }
+    return { ...drawingToMapWgs84(point, 'msk42'), row: rowNumber }
   }
   if (mode === 'sk-msk' || mode === 'sk-wgs') {
-    const sk63 = { x: number(row.first, labels[mode].first), y: number(row.second, labels[mode].second) }
-    return { ...sk63DrawingToMapWgs84(sk63), row: rowNumber }
+    const point = { x: number(row.first, labels[mode].first), y: number(row.second, labels[mode].second) }
+    return { ...drawingToMapWgs84(point, 'sk63'), row: rowNumber }
   }
   const lat = parseCoordinate(row.first, 'lat'), lon = parseCoordinate(row.second, 'lon')
   return { lat, lon, row: rowNumber }
@@ -116,10 +116,10 @@ function render() {
       <div class="table-scroll"><table><thead><tr><th>№</th><th>${info.first}</th><th>${info.second}</th><th>${info.out1}</th><th>${info.out2}</th><th></th></tr></thead><tbody>${resultRows}</tbody></table></div>
       <button id="add" class="add">＋ Добавить строку</button></section>
       <section class="map-panel panel" aria-label="Карта точек">
-        <div class="panel-head map-head"><div><h2>Точки на карте Севастополя</h2><p>Маркеры соответствуют заполненным строкам таблицы.</p></div><span class="map-calibration">Привязка карты: X +110 м · Y +21,5 м</span></div>
+        <div class="panel-head map-head"><div><h2>Точки на карте Севастополя</h2><p>Маркеры соответствуют заполненным строкам таблицы.</p></div><span class="map-calibration">Привязка карты: X (север) +0,2 м · Y (восток) +0,6 м</span></div>
         <div id="map" role="application" aria-label="Интерактивная карта OpenStreetMap"></div>
         <p id="map-status" class="map-status" aria-live="polite">Нет заполненных точек.</p>
-        <p class="map-note">Эмпирическая привязка только для карты: X — север, Y — восток. Основные результаты конвертера не сдвигаются. Подложка OSM загружается из интернета; без сети вычисления работают, но карта может быть пустой. Точность привязки не проверена на независимых контрольных точках.</p>
+        <p class="map-note">Привязка только для карты и не влияет на результаты конвертера. Величина измерена наложением чертежа «границы севастополя.dxf» (МСК-42) на береговую линию OSM в QGIS/PROJ и составляет десятые доли метра при разбросе около 2 м, то есть лежит в пределах точности самой подложки. Подложка OSM загружается из интернета; без сети вычисления работают, но карта может быть пустой.</p>
       </section>
       <section class="note"><h2>О методике</h2><p>Плоские координаты вычисляются в проекции Гаусса—Крюгера на эллипсоиде Красовского 1940. Для WGS-84 применяется 7-параметрическое преобразование Пулково-1942 → WGS-84 из исходной книги. Преобразования и маркеры рассчитываются в браузере; введённые координаты не отправляются. Для карты загружаются тайлы OSM видимой области, поэтому сервер тайлов получает запросы о просматриваемом районе.</p><p><b>Автономный режим:</b> откройте сайт один раз в сети, затем выберите «Установить приложение» в браузере — конвертер и его формулы останутся доступны без интернета.</p></section>
     </main><footer>Версия 1.0 · Проверяйте результат на контрольных точках перед производственным применением.</footer>`

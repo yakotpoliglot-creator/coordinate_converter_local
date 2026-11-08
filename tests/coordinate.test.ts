@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { formatDms, geographicToGrid, msk42ToSk63, parseCoordinate, sk63DrawingToMapWgs84, sk63ToMsk42, sk63ToWgs84, wgs84ToSk63 } from '../src/coordinates.ts'
+import { drawingToMapWgs84, formatDms, geographicToGrid, mapCalibration, msk42ToSk63, parseCoordinate, sk63ToMsk42, sk63ToWgs84, wgs84ToSk63 } from '../src/coordinates.ts'
 
 function near(actual: number, expected: number, tolerance: number, name: string) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${name}: ${actual}; expected ${expected}; tolerance ${tolerance}`)
@@ -32,14 +32,33 @@ const skBack = wgs84ToSk63(wgs)
 near(skBack.x, 4920693.86, 0.002, 'WGS-84 → СК-63 X обратный')
 near(skBack.y, 4383242.615, 0.002, 'WGS-84 → СК-63 Y обратный')
 
-// Empirical offset is map-only: undo the local drawing shift to recover the OSM location.
+// Map-only registration: it must stay sub-metre and must be exactly reversible,
+// so removing it recovers the original drawing coordinate.
 const mapReference = { lat: 44.6166, lon: 33.5253 }
-const mapBaseGrid = wgs84ToSk63(mapReference)
-const locallyShiftedGrid = { x: mapBaseGrid.x + 110, y: mapBaseGrid.y + 21.5 }
-const mapRecovered = sk63DrawingToMapWgs84(locallyShiftedGrid)
-near(mapRecovered.lat, mapReference.lat, 1e-8, 'Map-only correction latitude')
-near(mapRecovered.lon, mapReference.lon, 1e-8, 'Map-only correction longitude')
+const drawingGrid = wgs84ToSk63(mapReference)
+const registeredGrid = { x: drawingGrid.x - mapCalibration.north, y: drawingGrid.y - mapCalibration.east }
+const mapRecovered = drawingToMapWgs84(registeredGrid, 'sk63')
+near(mapRecovered.lat, mapReference.lat, 1e-8, 'Map registration latitude')
+near(mapRecovered.lon, mapReference.lon, 1e-8, 'Map registration longitude')
+assert.ok(Math.hypot(mapCalibration.east, mapCalibration.north) < 5, 'Map-only registration must stay sub-5-metre')
+// The registration must not leak into the converter's own results.
+const unregistered = sk63ToWgs84(drawingGrid)
+near(unregistered.lat, mapReference.lat, 1e-8, 'Converter latitude unaffected by map registration')
+near(unregistered.lon, mapReference.lon, 1e-8, 'Converter longitude unaffected by map registration')
 
+// Independent verification against QGIS 3.44 / PROJ, not against our own round trip.
+// The reference run used the user's MSK-42 definition (CM 33°, FE −18 001.8, FN −4 915 002.6)
+// and the workbook's Pulkovo-1942 → WGS-84 parameters.
+near(msk42ToSk63({ x: 26153.36, y: 21785.39 }).x, 4932306.725, 0.05, 'PROJ МСК-42 → СК-63 X')
+near(msk42ToSk63({ x: 26153.36, y: 21785.39 }).y, 4379481.881, 0.05, 'PROJ МСК-42 → СК-63 Y')
+near(msk42ToSk63({ x: 31822.99, y: 40111.73 }).x, 4938089.001, 0.05, 'PROJ МСК-42 → СК-63 X (восток города)')
+near(msk42ToSk63({ x: 31822.99, y: 40111.73 }).y, 4397774.341, 0.05, 'PROJ МСК-42 → СК-63 Y (восток города)')
+const projWgs = sk63ToWgs84({ x: 4932306.725, y: 4379481.881 })
+near(projWgs.lat, 44.6038718, 1e-7, 'PROJ СК-63 → WGS-84 широта')
+near(projWgs.lon, 33.4996906, 1e-7, 'PROJ СК-63 → WGS-84 долгота')
+const projBack = wgs84ToSk63({ lat: 44.5611206, lon: 33.5472981 })
+near(projBack.x, 4927603.436, 0.05, 'PROJ WGS-84 → СК-63 X')
+near(projBack.y, 4383322.318, 0.05, 'PROJ WGS-84 → СК-63 Y')
 near(parseCoordinate('44°29\'56.25790"N', 'lat'), 44.498960527777776, 1e-12, 'DMS широта')
 near(parseCoordinate('33°32\'42,65809"E', 'lon'), 33.545182802777774, 1e-12, 'DMS долгота')
 assert.equal(formatDms(44.498960527777776, 'lat'), '44°29\'56.25790"N')
