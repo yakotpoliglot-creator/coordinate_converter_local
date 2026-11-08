@@ -137,6 +137,8 @@ td input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #78d6c133; }
   #map { height: min(58dvh, 560px); }
 }
 .map-status { margin: 0; padding: 10px 20px 0; color: #dbe8e4; font-size: 12px; }
+/* The live GPS readout: the person's own coordinates, the accuracy and the walk to the point. */
+.map-location { margin: 0; padding: 8px 20px 0; color: #cfe3f5; font-size: 12px; font-variant-numeric: tabular-nums; }
 .map-note { margin: 0; padding: 10px 20px 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .numbered-map-marker { display: grid; place-items: center; border: 1px solid #fff; border-radius: 50%; background: #d32f2f; color: #fff; font: 800 8px/1 system-ui, sans-serif; box-shadow: 0 1px 3px #0009; }
 .numbered-map-marker:hover { background: #f0453c; }
@@ -211,6 +213,7 @@ footer { text-align: center; color: #b4c2c1; border-top: 1px solid #334248; padd
   .map-calibration { display: block; margin-top: 8px; white-space: normal; }
   #map { height: 360px; min-height: 300px; }
   .map-status { padding: 10px 14px 0; }
+  .map-location { padding: 8px 14px 0; }
   .map-note { padding: 10px 14px 14px; }
   .note { padding-left: 13px; }
   footer { padding: 18px 14px calc(18px + env(safe-area-inset-bottom)); }

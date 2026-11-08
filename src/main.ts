@@ -37,6 +37,11 @@ let previousMapPointCount = 0
 // Which basemap is on screen decides the registration: the Esri imagery and the OSM
 // scheme sit about eight metres apart here, so the marker shift follows the basemap.
 let basemap: BasemapId = 'satellite'
+// The GPS fix is one sample kept in memory: it survives a re-render and is re-registered
+// when the basemap changes, but it is never tracked continuously, so the phone's GPS is
+// only switched on for the moment the button is pressed.
+let fix: { lat: number; lon: number; accuracy: number } | null = null
+let fixLayer: L.LayerGroup | undefined
 // Map marks: a small red disc with the row number inside. The size is shared with the
 // canvas export, so the saved picture matches what is on screen.
 const MARKER_SIZE = 14
@@ -131,7 +136,7 @@ function renderRow(row: Row, index: number, info: typeof labels[Mode]): string {
 }
 
 function render() {
-  if (map) { map.remove(); map = undefined; markerLayer = undefined }
+  if (map) { map.remove(); map = undefined; markerLayer = undefined; fixLayer = undefined }
   previousMapPointCount = 0
   const info = labels[mode]
   const resultRows = rows.map((row, index) => renderRow(row, index, info)).join('')
@@ -144,10 +149,11 @@ function render() {
       <div class="table-scroll"><table><thead><tr><th>№</th><th>${info.first}</th><th>${info.second}</th><th>${info.out1}</th><th>${info.out2}</th><th></th></tr></thead><tbody>${resultRows}</tbody></table></div>
       <button id="add" class="add">＋ Добавить строку</button></section>
       <section class="map-panel panel" aria-label="Карта точек">
-        <div class="panel-head map-head"><div><h2>Точки на карте Севастополя</h2><p>Маркеры соответствуют заполненным строкам таблицы.</p></div><div class="map-head-actions"><span class="map-calibration" id="map-calibration"></span><button id="map-download" class="secondary" type="button">Скачать картинку</button></div></div>
+        <div class="panel-head map-head"><div><h2>Точки на карте Севастополя</h2><p>Маркеры соответствуют заполненным строкам таблицы.</p></div><div class="map-head-actions"><span class="map-calibration" id="map-calibration"></span><button id="map-locate" class="secondary" type="button">Показать меня</button><button id="map-download" class="secondary" type="button">Скачать картинку</button></div></div>
         <div id="map" role="application" aria-label="Интерактивная карта Севастополя"></div>
         <p id="map-status" class="map-status" aria-live="polite">Нет заполненных точек.</p>
-        <p class="map-note">Привязка только для карты и не влияет на результаты конвертера, и она переключается вместе с подложкой, потому что подложки смещены друг относительно друга примерно на восемь метров. Для спутниковых снимков Esri сдвиг измерен в QGIS/GDAL по ортофотопланам МСК-42 «Севастополь»: 14 замеров по городу (пять точек на двух зумах и шесть случайных планшетов) дали одинаковое смещение с медианой +5,1 м восток и +6,0 м север, разброс около 1 м, без разворота и масштаба. Для схемы OSM сдвиг измерен наложением береговой линии чертежа «границы севастополя.dxf»: +0,6 м восток и +0,2 м север при разбросе около 2 м. Подложки загружаются из интернета; без сети вычисления работают, но карта может быть пустой.</p>
+        <p id="map-location" class="map-location" aria-live="polite" hidden></p>
+        <p class="map-note">Привязка только для карты и не влияет на результаты конвертера, и она переключается вместе с подложкой, потому что подложки смещены друг относительно друга примерно на восемь метров. Для спутниковых снимков Esri сдвиг измерен в QGIS/GDAL по ортофотопланам МСК-42 «Севастополь»: 14 замеров по городу (пять точек на двух зумах и шесть случайных планшетов) дали одинаковое смещение с медианой +5,1 м восток и +6,0 м север, разброс около 1 м, без разворота и масштаба. Для схемы OSM сдвиг измерен наложением береговой линии чертежа «границы севастополя.dxf»: +0,6 м восток и +0,2 м север при разбросе около 2 м. Подложки загружаются из интернета; без сети вычисления работают, но карта может быть пустой. Кнопка «Показать меня» берёт одно измерение GPS и сдвигает его той же поправкой, что и маркеры, поэтому ваша отметка и точки на снимке лежат в одной системе координат. Круг вокруг отметки — это точность телефона, обычно ±3–10 м; поправка убирает систематический сдвиг подложки, но не заменяет точность приёмника.</p>
       </section>
       <section class="note"><h2>О методике</h2><p>Плоские координаты вычисляются в проекции Гаусса—Крюгера на эллипсоиде Красовского 1940. Для WGS-84 применяется 7-параметрическое преобразование Пулково-1942 → WGS-84 из исходной книги. Преобразования и маркеры рассчитываются в браузере; введённые координаты не отправляются. Для карты загружаются тайлы спутниковых снимков и подписей видимой области, поэтому серверы тайлов получают запросы о просматриваемом районе.</p><p><b>Автономный режим:</b> откройте сайт один раз в сети, затем выберите «Установить приложение» в браузере — конвертер и его формулы останутся доступны без интернета.</p></section>
     </main><footer>Версия 1.0 · Проверяйте результат на контрольных точках перед производственным применением.</footer>`
@@ -199,13 +205,22 @@ function setupMap() {
     basemap = event.name === 'Схема OSM' ? 'scheme' : 'satellite'
     updateCalibrationLabel()
     updateMapMarkers()
+    // The GPS dot carries the registration of the basemap too, so it moves with the switch.
+    drawFix()
+    updateFixText()
   })
 
   markerLayer = L.layerGroup().addTo(map)
+  // Held separately from the markers so a fresh re-render or a basemap switch can update
+  // the dot on its own, and so the dot always sits above the numbered points.
+  fixLayer = L.layerGroup().addTo(map)
   window.setTimeout(() => map?.invalidateSize(), 0)
   document.querySelector<HTMLButtonElement>('#map-download')?.addEventListener('click', () => { void downloadMapImage() })
+  document.querySelector<HTMLButtonElement>('#map-locate')?.addEventListener('click', () => { void locateMe() })
   updateCalibrationLabel()
   updateMapMarkers(true)
+  drawFix()
+  updateFixText()
 }
 
 function collectMapPoints(): MapPoint[] {
@@ -416,6 +431,126 @@ function updateMapMarkers(forceFit = false) {
     else map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 })
   }
   previousMapPointCount = points.length
+  // The distance to the nearest point changes whenever the table does.
+  updateFixText()
+}
+
+/** The registration is a property of the basemap, not of the object drawn on it, so the GPS
+ *  fix goes through exactly the same shift as a marker of the same point: convert the fix
+ *  into the drawing frame, then let drawingToMapWgs84 add the basemap offset. The dot and
+ *  the numbered points then share one frame, and the distance between them is the real one. */
+function fixInMapFrame(sample: { lat: number; lon: number }): { lat: number; lon: number } {
+  return drawingToMapWgs84(wgs84ToSk63({ lat: sample.lat, lon: sample.lon }), 'sk63', basemap)
+}
+
+function drawFix() {
+  if (!map || !fixLayer) return
+  fixLayer.clearLayers()
+  if (!fix) return
+  const point = fixInMapFrame(fix)
+  const accuracy = Number.isFinite(fix.accuracy) ? fix.accuracy : 0
+  const offset = mapCalibration[basemap]
+  // The circle is the receiver's own accuracy; the map shift neither grows nor shrinks it.
+  if (accuracy > 0) {
+    L.circle([point.lat, point.lon], {
+      radius: accuracy, color: '#3b9dff', weight: 1, opacity: 0.75,
+      fillColor: '#3b9dff', fillOpacity: 0.12, interactive: false
+    }).addTo(fixLayer)
+  }
+  L.circleMarker([point.lat, point.lon], { radius: 7, color: '#ffffff', weight: 2, fillColor: '#3b9dff', fillOpacity: 1 })
+    .bindTooltip(`Вы здесь · точность ±${accuracy.toFixed(0)} м`)
+    .bindPopup(`<b>Вы здесь</b><br>Широта ${fix.lat.toFixed(8)}°, долгота ${fix.lon.toFixed(8)}°<br>Точность GPS ±${accuracy.toFixed(1)} м<br><small>На карте сдвинуто на поправку подложки: X (север) ${signedMetres(offset.north)} м · Y (восток) ${signedMetres(offset.east)} м</small>`)
+    .addTo(fixLayer)
+}
+
+function bearingTowards(from: { lat: number; lon: number }, to: { lat: number; lon: number }): number {
+  const radians = (value: number) => value * Math.PI / 180
+  const lat1 = radians(from.lat)
+  const lat2 = radians(to.lat)
+  const deltaLon = radians(to.lon - from.lon)
+  const y = Math.sin(deltaLon) * Math.cos(lat2)
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon)
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360
+}
+
+/** Nearest filled row to the current fix: both sides are already in the basemap frame, and
+ *  because the shift is the same for both, the distance is the true ground distance. */
+function nearestTarget(): { row: number; distance: number; bearing: number } | null {
+  if (!fix) return null
+  const from = fixInMapFrame(fix)
+  const origin = L.latLng(from.lat, from.lon)
+  let best: { row: number; distance: number; bearing: number } | null = null
+  for (const point of collectMapPoints()) {
+    const distance = origin.distanceTo(L.latLng(point.lat, point.lon))
+    if (!best || distance < best.distance) best = { row: point.row, distance, bearing: bearingTowards(from, point) }
+  }
+  return best
+}
+
+function updateFixText() {
+  const element = document.querySelector<HTMLParagraphElement>('#map-location')
+  if (!element) return
+  if (!fix) {
+    element.hidden = true
+    element.textContent = ''
+    return
+  }
+  const accuracy = Number.isFinite(fix.accuracy) ? fix.accuracy : 0
+  const head = `Ваше положение ${fix.lat.toFixed(6)}°, ${fix.lon.toFixed(6)}° · точность GPS ±${accuracy.toFixed(0)} м`
+  const target = nearestTarget()
+  element.hidden = false
+  if (!target) {
+    element.textContent = `${head}. Заполненных точек пока нет.`
+    return
+  }
+  const distance = target.distance < 10 ? target.distance.toFixed(1) : target.distance.toFixed(0)
+  const tail = `до точки ${target.row}: ${distance.replace('.', ',')} м, азимут ${target.bearing.toFixed(0)}°`
+  // Only claim "on site" when the point falls inside the receiver's own error circle.
+  element.textContent = target.distance <= Math.max(accuracy, 4)
+    ? `${head} · ${tail} · вы на месте`
+    : `${head} · ${tail}`
+}
+
+/** One fix on demand: the browser asks for permission the first time only, and the GPS is
+ *  not left running afterwards, so the battery is untouched the rest of the time. */
+async function locateMe() {
+  const button = document.querySelector<HTMLButtonElement>('#map-locate')
+  const element = document.querySelector<HTMLParagraphElement>('#map-location')
+  const report = (message: string) => {
+    if (!element) return
+    element.hidden = false
+    element.textContent = message
+  }
+  if (!window.isSecureContext) {
+    report('Геолокация работает только по HTTPS. Откройте сайт по защищённому адресу.')
+    return
+  }
+  if (!navigator.geolocation) {
+    report('Этот браузер не поддерживает геолокацию.')
+    return
+  }
+  button?.setAttribute('disabled', '')
+  report('Определяю положение… Разрешите доступ, если браузер спросит.')
+  try {
+    const sample = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 })
+    })
+    fix = { lat: sample.coords.latitude, lon: sample.coords.longitude, accuracy: sample.coords.accuracy }
+    drawFix()
+    updateFixText()
+    // Bring the dot into view only when it is off screen, so the view of the points is kept.
+    const point = fixInMapFrame(fix)
+    if (map && !map.getBounds().contains([point.lat, point.lon])) map.setView([point.lat, point.lon], 16)
+  } catch (cause) {
+    const code = (cause as GeolocationPositionError | undefined)?.code
+    report(code === 1
+      ? 'Доступ к геолокации запрещён. Разрешите его в настройках браузера и нажмите «Показать меня» снова.'
+      : code === 3
+        ? 'GPS не ответил вовремя. Выйдите на открытое место и попробуйте снова.'
+        : 'Не удалось определить положение. Проверьте, включён ли GPS.')
+  } finally {
+    button?.removeAttribute('disabled')
+  }
 }
 
 function updateRow(row: Row) {

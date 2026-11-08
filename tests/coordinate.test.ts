@@ -62,6 +62,27 @@ const unregistered = sk63ToWgs84(drawingGrid)
 near(unregistered.lat, mapReference.lat, 1e-8, 'Converter latitude unaffected by map registration')
 near(unregistered.lon, mapReference.lon, 1e-8, 'Converter longitude unaffected by map registration')
 
+// The live GPS fix is drawn through the same registration as the markers: a phone fix is
+// converted to the drawing frame with wgs84ToSk63 and then pushed through drawingToMapWgs84.
+// It must land exactly where the marker of that same point lands, otherwise the dot would
+// show a systematic offset against the point the user is walking to.
+function groundMetres(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
+  const lat = (a.lat + b.lat) / 2
+  return Math.hypot((a.lat - b.lat) * 111_320, (a.lon - b.lon) * 111_320 * Math.cos(lat * Math.PI / 180))
+}
+const fixTruth = sk63ToWgs84({ x: 4_915_000, y: 4_300_000 })
+const fixBack = wgs84ToSk63(fixTruth)
+near(fixBack.x, 4_915_000, 0.001, 'Live fix WGS-84 → СК-63 X')
+near(fixBack.y, 4_300_000, 0.001, 'Live fix WGS-84 → СК-63 Y')
+for (const [name, offset] of Object.entries(mapCalibration)) {
+  const markerAt = drawingToMapWgs84({ x: 4_915_000, y: 4_300_000 }, 'sk63', name as BasemapId)
+  const dotAt = drawingToMapWgs84(wgs84ToSk63(fixTruth), 'sk63', name as BasemapId)
+  near(groundMetres(markerAt, dotAt), 0, 0.01, `Dot and marker share one frame (${name})`)
+  // And the dot is deliberately in the imagery frame: it is displaced from the bare fix by
+  // the registration itself, which is what makes it sit on the right pixel of the basemap.
+  near(groundMetres(fixTruth, dotAt), Math.hypot(offset.east, offset.north), 0.05, `Dot carries the basemap registration (${name})`)
+}
+
 // Independent verification against QGIS 3.44 / PROJ, not against our own round trip.
 // The reference run used the user's MSK-42 definition (CM 33°, FE −18 001.8, FN −4 915 002.6)
 // and the workbook's Pulkovo-1942 → WGS-84 parameters.
