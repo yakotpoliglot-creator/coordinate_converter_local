@@ -43,8 +43,8 @@ git branch -M main
 git push -u origin main
 ```
 
-3. Выполните `npm run deploy` — в репозитории появится ветка `gh-pages`.
-4. В настройках **Settings → Pages** выберите публикацию из ветки `gh-pages`.
+3. В настройках **Settings → Pages** выберите **Source: GitHub Actions**.
+4. После отправки ветки `main` workflow [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) сам запустит тесты, соберёт PWA и опубликует его. URL сайта появится в выводе workflow.
 
 После первого открытия опубликованного сайта браузер скачивает service worker. Затем приложение доступно офлайн; для удобства его можно установить через меню браузера «Установить приложение».
 
