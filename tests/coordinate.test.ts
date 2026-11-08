@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { formatDms, geographicToGrid, msk42ToSk63, parseCoordinate, sk63ToMsk42, sk63ToWgs84, wgs84ToSk63 } from '../src/coordinates.ts'
+import { formatDms, geographicToGrid, msk42ToSk63, parseCoordinate, sk63DrawingToMapWgs84, sk63ToMsk42, sk63ToWgs84, wgs84ToSk63 } from '../src/coordinates.ts'
 
 function near(actual: number, expected: number, tolerance: number, name: string) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${name}: ${actual}; expected ${expected}; tolerance ${tolerance}`)
@@ -31,6 +31,14 @@ near(wgs.lon, 33.545182802777774, 0.00000004, 'СК-63 → WGS-84 Topcon дол�
 const skBack = wgs84ToSk63(wgs)
 near(skBack.x, 4920693.86, 0.002, 'WGS-84 → СК-63 X обратный')
 near(skBack.y, 4383242.615, 0.002, 'WGS-84 → СК-63 Y обратный')
+
+// Empirical offset is map-only: undo the local drawing shift to recover the OSM location.
+const mapReference = { lat: 44.6166, lon: 33.5253 }
+const mapBaseGrid = wgs84ToSk63(mapReference)
+const locallyShiftedGrid = { x: mapBaseGrid.x + 110, y: mapBaseGrid.y + 21.5 }
+const mapRecovered = sk63DrawingToMapWgs84(locallyShiftedGrid)
+near(mapRecovered.lat, mapReference.lat, 1e-8, 'Map-only correction latitude')
+near(mapRecovered.lon, mapReference.lon, 1e-8, 'Map-only correction longitude')
 
 near(parseCoordinate('44°29\'56.25790"N', 'lat'), 44.498960527777776, 1e-12, 'DMS широта')
 near(parseCoordinate('33°32\'42,65809"E', 'lon'), 33.545182802777774, 1e-12, 'DMS долгота')

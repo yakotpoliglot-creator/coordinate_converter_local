@@ -164,6 +164,14 @@ export function wgs84ToSk63(geo: Geographic): Point {
   return geographicToGrid(pulkovo, 'sk63')
 }
 
+/** Empirical OSM-to-drawing registration, applied only while placing local points on the map. */
+export const sk63MapCorrection = { x: 110, y: 21.5 } as const
+
+/** Reverse the drawing-only translation before locating an SK-63 point on the WGS-84 map. */
+export function sk63DrawingToMapWgs84(point: Point): Geographic {
+  return sk63ToWgs84({ x: point.x - sk63MapCorrection.x, y: point.y - sk63MapCorrection.y })
+}
+
 export function parseCoordinate(input: string, kind: 'lat' | 'lon'): number {
   const raw = input.trim().replace(',', '.')
   if (!raw) throw new Error('Пустая координата')
