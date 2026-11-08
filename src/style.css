@@ -135,7 +135,15 @@ td input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #78d6c133; }
 [hidden] { display: none !important; }
 .leaflet-control-attribution { background: #172126eF !important; color: #d3dfdc !important; }
 .leaflet-control-attribution a { color: #8edac5 !important; }
-.leaflet-tile-pane { filter: invert(.88) hue-rotate(180deg) brightness(.9) contrast(.9); }
+/* The dark inverting filter belongs to the OSM scheme only: satellite imagery and its
+   label overlay must be shown as rendered. */
+.map-scheme-tile { filter: invert(.88) hue-rotate(180deg) brightness(.9) contrast(.9); }
+.map-overlay-tile { filter: saturate(.7); }
+.leaflet-control-layers { background: #172126f0 !important; border: 1px solid #52646a !important; border-radius: 8px !important; color: #e6efec !important; box-shadow: 0 2px 10px #0007 !important; }
+.leaflet-control-layers-expanded { padding: 8px 12px !important; font-size: 12px; }
+.leaflet-control-layers-separator { border-top-color: #52646a !important; }
+.leaflet-control-layers label { margin: 3px 0; }
+.leaflet-control-layers input { accent-color: #7fd7c0; margin-right: 5px; }
 .leaflet-bar, .leaflet-bar a, .leaflet-bar a:hover { border-color: #52646a !important; }
 .leaflet-bar a { background: #1d292f !important; color: #edf5f2 !important; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #172126; color: #e9f0ee; }

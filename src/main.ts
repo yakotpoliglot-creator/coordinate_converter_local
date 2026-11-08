@@ -119,9 +119,9 @@ function render() {
         <div class="panel-head map-head"><div><h2>Точки на карте Севастополя</h2><p>Маркеры соответствуют заполненным строкам таблицы.</p></div><span class="map-calibration">Привязка карты: X (север) +0,2 м · Y (восток) +0,6 м</span></div>
         <div id="map" role="application" aria-label="Интерактивная карта OpenStreetMap"></div>
         <p id="map-status" class="map-status" aria-live="polite">Нет заполненных точек.</p>
-        <p class="map-note">Привязка только для карты и не влияет на результаты конвертера. Величина измерена наложением чертежа «границы севастополя.dxf» (МСК-42) на береговую линию OSM в QGIS/PROJ и составляет десятые доли метра при разбросе около 2 м, то есть лежит в пределах точности самой подложки. Подложка OSM загружается из интернета; без сети вычисления работают, но карта может быть пустой.</p>
+        <p class="map-note">Привязка только для карты и не влияет на результаты конвертера. Величина измерена наложением чертежа «границы севастополя.dxf» (МСК-42) на береговую линию OSM в QGIS/PROJ и составляет десятые доли метра при разбросе около 2 м, то есть лежит в пределах точности самой подложки. Подложки загружаются из интернета; без сети вычисления работают, но карта может быть пустой.</p>
       </section>
-      <section class="note"><h2>О методике</h2><p>Плоские координаты вычисляются в проекции Гаусса—Крюгера на эллипсоиде Красовского 1940. Для WGS-84 применяется 7-параметрическое преобразование Пулково-1942 → WGS-84 из исходной книги. Преобразования и маркеры рассчитываются в браузере; введённые координаты не отправляются. Для карты загружаются тайлы OSM видимой области, поэтому сервер тайлов получает запросы о просматриваемом районе.</p><p><b>Автономный режим:</b> откройте сайт один раз в сети, затем выберите «Установить приложение» в браузере — конвертер и его формулы останутся доступны без интернета.</p></section>
+      <section class="note"><h2>О методике</h2><p>Плоские координаты вычисляются в проекции Гаусса—Крюгера на эллипсоиде Красовского 1940. Для WGS-84 применяется 7-параметрическое преобразование Пулково-1942 → WGS-84 из исходной книги. Преобразования и маркеры рассчитываются в браузере; введённые координаты не отправляются. Для карты загружаются тайлы спутниковых снимков и подписей видимой области, поэтому серверы тайлов получают запросы о просматриваемом районе.</p><p><b>Автономный режим:</b> откройте сайт один раз в сети, затем выберите «Установить приложение» в браузере — конвертер и его формулы останутся доступны без интернета.</p></section>
     </main><footer>Версия 1.0 · Проверяйте результат на контрольных точках перед производственным применением.</footer>`
   bind()
   setupMap()
@@ -130,12 +130,34 @@ function render() {
 function setupMap() {
   const element = document.querySelector<HTMLDivElement>('#map')
   if (!element) return
-  map = L.map(element, { zoomControl: true, preferCanvas: true }).setView([44.6166, 33.5253], 12)
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  map = L.map(element, { zoomControl: true, preferCanvas: true, maxZoom: 19 }).setView([44.6166, 33.5253], 12)
+
+  const osmAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  // Satellite imagery: no key needed, real coverage down to z19 over the city.
+  const satellite = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 19, attribution: 'Снимки &copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics' }
+  )
+  // Streets and place names drawn over the imagery: OSM keeps Russian names at every
+  // zoom, which the Esri label service does not offer above z15 here.
+  const overlay = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     subdomains: 'abc',
     maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  }).addTo(map)
+    opacity: 0.5,
+    className: 'map-overlay-tile',
+    attribution: osmAttribution
+  })
+  const scheme = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    subdomains: 'abc',
+    maxZoom: 19,
+    className: 'map-scheme-tile',
+    attribution: osmAttribution
+  })
+
+  satellite.addTo(map)
+  overlay.addTo(map)
+  L.control.layers({ 'Спутник': satellite, 'Схема OSM': scheme }, { 'Улицы и подписи': overlay }, { collapsed: false, position: 'topright' }).addTo(map)
+
   markerLayer = L.layerGroup().addTo(map)
   window.setTimeout(() => map?.invalidateSize(), 0)
   updateMapMarkers(true)
