@@ -1,0 +1,177 @@
+# Протокол замера: смещение снимков Esri World Imagery относительно ортофотопланов МСК-42 «Севастополь»
+
+- Дата: 8 ноября 2026.
+- Инструмент: QGIS 3.44.13, tools/measure-esri-offset.py (GDAL + numpy, взаимная корреляция градиентов).
+- Эталон: 119 ортофотопланов МСК-42 «Севастополь» (Пулково-1942, Красовский, CM 33°, FE -18 001,8, FN -4 915 002,6).
+- Прогоны: z17 по пяти точкам пользователя, z18 по тем же пяти точкам, z17 по четырём случайным планшетам.
+- Знак: dE/dN — на сколько снимок Esri смещён на восток/север относительно истины; это и есть величина, которую приложение прибавляет к точке.
+- Точка p3 в обоих зумах не прошла проверку правдоподобия (сдвиг 304 px) и в медиану не вошла.
+- Код возврата QGIS-обёртки ненулевой из-за падения при завершении интерпретатора; все числа печатаются до этого.
+
+Ниже — вывод скрипта без изменений.
+=== sign self-test ===
+  self-test want (dy,dx)=(7, -5) -> got (-7,5)  conf=116.7
+  self-test want (dy,dx)=(-12, 9) -> got (12,-9)  conf=117.1
+  self-test want (dy,dx)=(0, 0) -> got (0,0)  conf=123.0
+
+orthophoto tiles found: 119
+
+=== site p1: MSK-42  N=15819.52  E=30048.66 ===
+  tile: m_mosaic_66.tif
+  lon/lat = 33.602812, 44.510380   3857 = 3740647.9, 5544767.4
+  Esri tiles downloaded: 56  mosaic 1792x2048
+  warped ortho: 1792x2048
+  shift px (dy,dx)=(9,-4)  conf=9.8  ground 0.852 m/px
+  ==> Esri offset: dE=+3.41 m  dN=+7.67 m  |d|=8.39 m
+
+=== site p2: MSK-42  N=14115.88  E=29584.79 ===
+  tile: m_mosaic_51.tif
+  lon/lat = 33.596822, 44.495080   3857 = 3739981.1, 5542379.4
+  Esri tiles downloaded: 49  mosaic 1792x1792
+  warped ortho: 1792x1792
+  shift px (dy,dx)=(7,-6)  conf=3.9  ground 0.852 m/px
+  ==> Esri offset: dE=+5.11 m  dN=+5.96 m  |d|=7.85 m
+
+=== site p3: MSK-42  N=28011.88  E=23310.09 ===
+  tile: m_mosaic_110.tif
+  lon/lat = 33.519044, 44.620510   3857 = 3731322.9, 5561975.1
+  Esri tiles downloaded: 56  mosaic 2048x1792
+  warped ortho: 2048x1792
+  implausible shift (dy,dx)=(304,-24) > 40 px -> failed match, skip
+
+=== site p4: MSK-42  N=27222.19  E=24984.88 ===
+  tile: m_mosaic_110.tif
+  lon/lat = 33.540080, 44.613306   3857 = 3733664.6, 5560848.5
+  Esri tiles downloaded: 49  mosaic 1792x1792
+  warped ortho: 1792x1792
+  shift px (dy,dx)=(6,-7)  conf=9.1  ground 0.850 m/px
+  ==> Esri offset: dE=+5.95 m  dN=+5.10 m  |d|=7.84 m
+
+=== site p5: MSK-42  N=28851.85  E=25160.99 ===
+  tile: m_mosaic_110.tif
+  lon/lat = 33.542435, 44.627960   3857 = 3733926.8, 5563140.4
+  Esri tiles downloaded: 49  mosaic 1792x1792
+  warped ortho: 1792x1792
+  shift px (dy,dx)=(8,-6)  conf=36.1  ground 0.850 m/px
+  ==> Esri offset: dE=+5.10 m  dN=+6.80 m  |d|=8.50 m
+
+=== SUMMARY: Esri imagery offset vs orthophoto (ground metres) ===
+  p1  m_mosaic_66.tif  dE=  +3.41  dN=  +7.67  |d|= 8.39  conf=  9.8  (44.5104, 33.6028)
+  p2  m_mosaic_51.tif  dE=  +5.11  dN=  +5.96  |d|= 7.85  conf=  3.9  (44.4951, 33.5968)
+  p4  m_mosaic_110.tif dE=  +5.95  dN=  +5.10  |d|= 7.84  conf=  9.1  (44.6133, 33.5401)
+  p5  m_mosaic_110.tif dE=  +5.10  dN=  +6.80  |d|= 8.50  conf= 36.1  (44.6280, 33.5424)
+  MEDIAN                  dE=  +5.11  dN=  +6.38
+  MEAN                    dE=  +4.89  dN=  +6.38
+  SPREAD                  dE=   2.54  dN=   2.56
+
+  To make markers sit on the right feature, ADD these values
+  to mapCalibration (east / north).
+⌣‣ㅺ‸潰湩獴਍=== sign self-test ===
+  self-test want (dy,dx)=(7, -5) -> got (-7,5)  conf=116.7
+  self-test want (dy,dx)=(-12, 9) -> got (12,-9)  conf=117.1
+  self-test want (dy,dx)=(0, 0) -> got (0,0)  conf=123.0
+
+orthophoto tiles found: 119
+
+=== site p1: MSK-42  N=15819.52  E=30048.66 ===
+  tile: m_mosaic_66.tif
+  lon/lat = 33.602812, 44.510380   3857 = 3740647.9, 5544767.4
+  Esri tiles downloaded: 49  mosaic 1792x1792
+  warped ortho: 1792x1792
+  shift px (dy,dx)=(17,-14)  conf=4.8  ground 0.426 m/px
+  ==> Esri offset: dE=+5.96 m  dN=+7.24 m  |d|=9.38 m
+
+=== site p2: MSK-42  N=14115.88  E=29584.79 ===
+  tile: m_mosaic_51.tif
+  lon/lat = 33.596822, 44.495080   3857 = 3739981.1, 5542379.4
+  Esri tiles downloaded: 49  mosaic 1792x1792
+  warped ortho: 1792x1792
+  shift px (dy,dx)=(18,-8)  conf=4.2  ground 0.426 m/px
+  ==> Esri offset: dE=+3.41 m  dN=+7.67 m  |d|=8.39 m
+
+=== site p3: MSK-42  N=28011.88  E=23310.09 ===
+  tile: m_mosaic_110.tif
+  lon/lat = 33.519044, 44.620510   3857 = 3731322.9, 5561975.1
+  Esri tiles downloaded: 49  mosaic 1792x1792
+  warped ortho: 1792x1792
+  flat window (esri std=1.2, ortho std=40.1) -> skip
+
+=== site p4: MSK-42  N=27222.19  E=24984.88 ===
+  tile: m_mosaic_110.tif
+  lon/lat = 33.540080, 44.613306   3857 = 3733664.6, 5560848.5
+  Esri tiles downloaded: 49  mosaic 1792x1792
+  warped ortho: 1792x1792
+  shift px (dy,dx)=(11,-12)  conf=19.1  ground 0.425 m/px
+  ==> Esri offset: dE=+5.10 m  dN=+4.68 m  |d|=6.92 m
+
+=== site p5: MSK-42  N=28851.85  E=25160.99 ===
+  tile: m_mosaic_110.tif
+  lon/lat = 33.542435, 44.627960   3857 = 3733926.8, 5563140.4
+  Esri tiles downloaded: 49  mosaic 1792x1792
+  warped ortho: 1792x1792
+  shift px (dy,dx)=(16,-12)  conf=15.9  ground 0.425 m/px
+  ==> Esri offset: dE=+5.10 m  dN=+6.80 m  |d|=8.50 m
+
+=== SUMMARY: Esri imagery offset vs orthophoto (ground metres) ===
+  p1  m_mosaic_66.tif  dE=  +5.96  dN=  +7.24  |d|= 9.38  conf=  4.8  (44.5104, 33.6028)
+  p2  m_mosaic_51.tif  dE=  +3.41  dN=  +7.67  |d|= 8.39  conf=  4.2  (44.4951, 33.5968)
+  p4  m_mosaic_110.tif dE=  +5.10  dN=  +4.68  |d|= 6.92  conf= 19.1  (44.6133, 33.5401)
+  p5  m_mosaic_110.tif dE=  +5.10  dN=  +6.80  |d|= 8.50  conf= 15.9  (44.6280, 33.5424)
+  MEDIAN                  dE=  +5.10  dN=  +7.02
+  MEAN                    dE=  +4.89  dN=  +6.60
+  SPREAD                  dE=   2.55  dN=   2.99
+
+  To make markers sit on the right feature, ADD these values
+  to mapCalibration (east / north).
+⌣‣ㅺ‷慲摮浯㐠਍=== sign self-test ===
+  self-test want (dy,dx)=(7, -5) -> got (-7,5)  conf=116.7
+  self-test want (dy,dx)=(-12, 9) -> got (12,-9)  conf=117.1
+  self-test want (dy,dx)=(0, 0) -> got (0,0)  conf=123.0
+
+orthophoto tiles found: 119
+random sites: 4 (seed 20240513)
+
+=== site r1: MSK-42  N=10007.18  E=48702.01 ===
+  tile: m_mosaic_41.tif
+  lon/lat = 33.836630, 44.456601   3857 = 3766676.4, 5536376.3
+  Esri tiles downloaded: 49  mosaic 1792x1792
+  warped ortho: 1792x1792
+  shift px (dy,dx)=(7,-5)  conf=6.9  ground 0.852 m/px
+  ==> Esri offset: dE=+4.26 m  dN=+5.97 m  |d|=7.33 m
+
+=== site r2: MSK-42  N=44690.71  E=29564.74 ===
+  tile: m_mosaic_171.tif
+  lon/lat = 33.599394, 44.770206   3857 = 3740267.4, 5585417.4
+  Esri tiles downloaded: 56  mosaic 1792x2048
+  warped ortho: 1792x2048
+  shift px (dy,dx)=(8,-6)  conf=4.0  ground 0.848 m/px
+  ==> Esri offset: dE=+5.09 m  dN=+6.78 m  |d|=8.48 m
+
+=== site r3: MSK-42  N=25962.42  E=34234.04 ===
+  tile: m_mosaic_95.tif
+  lon/lat = 33.656469, 44.601360   3857 = 3746621.0, 5558980.6
+  Esri tiles downloaded: 56  mosaic 2048x1792
+  warped ortho: 2048x1792
+  shift px (dy,dx)=(6,-8)  conf=7.6  ground 0.850 m/px
+  ==> Esri offset: dE=+6.80 m  dN=+5.10 m  |d|=8.50 m
+
+=== site r4: MSK-42  N=6322.92  E=38324.58 ===
+  tile: m_mosaic_23.tif
+  lon/lat = 33.705853, 44.424329   3857 = 3752118.4, 5531344.6
+  Esri tiles downloaded: 56  mosaic 2048x1792
+  warped ortho: 2048x1792
+  shift px (dy,dx)=(6,-4)  conf=22.4  ground 0.853 m/px
+  ==> Esri offset: dE=+3.41 m  dN=+5.12 m  |d|=6.15 m
+
+=== SUMMARY: Esri imagery offset vs orthophoto (ground metres) ===
+  r1  m_mosaic_41.tif  dE=  +4.26  dN=  +5.97  |d|= 7.33  conf=  6.9  (44.4566, 33.8366)
+  r2  m_mosaic_171.tif dE=  +5.09  dN=  +6.78  |d|= 8.48  conf=  4.0  (44.7702, 33.5994)
+  r3  m_mosaic_95.tif  dE=  +6.80  dN=  +5.10  |d|= 8.50  conf=  7.6  (44.6014, 33.6565)
+  r4  m_mosaic_23.tif  dE=  +3.41  dN=  +5.12  |d|= 6.15  conf= 22.4  (44.4243, 33.7059)
+  MEDIAN                  dE=  +4.67  dN=  +5.54
+  MEAN                    dE=  +4.89  dN=  +5.74
+  SPREAD                  dE=   3.39  dN=   1.68
+
+  To make markers sit on the right feature, ADD these values
+  to mapCalibration (east / north).
+⌣‣潤敮਍

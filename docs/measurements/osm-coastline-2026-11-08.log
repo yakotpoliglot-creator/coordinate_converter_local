@@ -1,0 +1,33 @@
+# Протокол замера: смещение схемы OpenStreetMap относительно чертежа «границы севастополя.dxf»
+
+- Дата: 8 ноября 2026.
+- Инструмент: QGIS 3.44.13 (PROJ), tools/measure-map-registration.py.
+- Эталон: береговая линия чертежа «границы севастополя.dxf» (МСК-42 «Севастополь», Пулково-1942, Красовский, CM 33°, FE -18 001,8, FN -4 915 002,6).
+- Вторая сторона: геометрия OSM natural=coastline через Overpass, bbox 44.35,33.15,44.85,34.05, пересчитана в МСК-42.
+- Отбор: объекты DXF длиннее 1000 м, точки через каждые 50 м, в расчёт идут только вершины не дальше 8 м от береговой линии.
+- Знак: east/north — на сколько береговая линия OSM лежит восточнее/севернее чертежа; это и есть величина, которую приложение прибавляет к точке.
+- Прогон повторён дважды с одинаковым результатом: восток +0,61 м, север +0,20 м.
+- Скрипт заканчивается кодом -1073741819 (0xC0000005): обёртка QGIS падает при завершении интерпретатора, как и описано в её docstring. Все числа печатаются до этого.
+
+Ниже — вывод скрипта без изменений (включая предупреждение GDAL о геометрии DXF).
+python-qgis-ltr.bat : Warning 1: organizePolygons() received an unexpected geometry.  Either a polygon with interior ri
+ngs, or a polygon with less than 4 points, or a non-Polygon geometry.  Return arguments as a collection.
+строка:3 знак:1
++ & 'C:\Program Files\QGIS 3.44.13\bin\python-qgis-ltr.bat' tools\measu ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Warning 1: orga...s a collection.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Warning 1: organizePolygons() received an unexpected geometry.  Either a polygon with interior rings, or a polygon with
+ less than 4 points, or a non-Polygon geometry.  Return arguments as a collection.
+coastline parts 189, vertices 8373
+shoreline-coincident vertices: 1340
+measured registration: east +0.61 m, north +0.20 m
+spread (MAD): east 1.94 m, north 1.72 m
+no correction      -> median residual 3.88 m, p90 7.18 m
+old +110.0/+21.5   -> median residual 68.37 m, p90 108.31 m
+measured           -> median residual 3.80 m, p90 6.91 m
+SK-63 reference values for tests/coordinate.test.ts:
+  MSK-42 (26153.36, 21785.39) -> SK-63 (4932306.725, 4379481.881)
+  MSK-42 (31822.99, 40111.73) -> SK-63 (4938089.001, 4397774.341)
+### exit:-1073741819
