@@ -181,23 +181,40 @@ export function wgs84ToMsk42(geo: Geographic): Point {
 }
 
 /**
- * Map-only registration of the local drawings, in metres of local east/north.
+ * Map-only registration per basemap, in metres of local east/north.
  *
- * Measured in QGIS 3.44 (PROJ) by overlaying «границы севастополя.dxf» on the OSM
- * `natural=coastline` geometry: 1340 shoreline-coincident drawing vertices gave a
- * best-fit translation of +0.61 m east and +0.20 m north with a spread (MAD) of
- * about 1.9 m. The reference itself is noisier than that, so this is a sub-metre
- * refinement, not a real displacement: the workbook datum transform is already
- * correct to the accuracy of the OSM shoreline. Converted results are unaffected.
+ * The two basemaps disagree with each other by about eight metres over Sevastopol,
+ * so one shift cannot serve both:
+ *
+ * - `satellite` — Esri World Imagery, measured in QGIS/GDAL against the МСК-42
+ *   «Севастополь» orthophoto mosaics (user-supplied Gauss-Krüger definition:
+ *   CM 33°, FE −18 001.8, FN −4 915 002.6, GCS_Pulkovo_1942, Красовский — identical
+ *   to our МСК-42). Fourteen measurements over an 80 km span, namely the five СК-42
+ *   points at z17 and z18 plus six randomly picked mosaics, all returned the same
+ *   translation: median +5.10 m east (MAD 0.22 m) and +5.97 m north (MAD 1.07 m),
+ *   with no rotation and no scale. Rounded to +5.1 m east and +6.0 m north.
+ * - `scheme` — the OSM raster scheme, whose coastline agrees with the drawing's own
+ *   shoreline: 1340 shoreline-coincident vertices of «границы севастополя.dxf» gave
+ *   +0.61 m east and +0.20 m north (MAD ≈ 1.9 m), i.e. a sub-metre refinement.
+ *
+ * Both are map-display only: the workbook datum transform and every converter
+ * result are unaffected.
  */
-export const mapCalibration = { east: 0.6, north: 0.2 } as const
+export const mapCalibration = {
+  satellite: { east: 5.1, north: 6.0 },
+  scheme: { east: 0.6, north: 0.2 }
+} as const
+
+export type BasemapId = keyof typeof mapCalibration
 
 /**
- * Place a local drawing point on the OSM map: the workbook conversion plus the
- * measured map-only registration. `system` is the grid the drawing coordinates are in.
+ * Place a local drawing point on the active basemap: the workbook conversion plus
+ * that basemap's measured registration. `system` is the grid the drawing coordinates
+ * are in, `basemap` selects the shift matching what is currently on screen.
  */
-export function drawingToMapWgs84(point: Point, system: 'msk42' | 'sk63'): Geographic {
-  const registered = { x: point.x + mapCalibration.north, y: point.y + mapCalibration.east }
+export function drawingToMapWgs84(point: Point, system: 'msk42' | 'sk63', basemap: BasemapId = 'satellite'): Geographic {
+  const offset = mapCalibration[basemap]
+  const registered = { x: point.x + offset.north, y: point.y + offset.east }
   return pulkovoToWgs84(gridToGeographic(registered, system))
 }
 

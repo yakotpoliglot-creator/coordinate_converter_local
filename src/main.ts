@@ -5,12 +5,14 @@ import {
   drawingToMapWgs84,
   formatDms,
   formatNumber,
+  mapCalibration,
   msk42ToSk63,
   parseCoordinate,
   sk63ToMsk42,
   sk63ToWgs84,
   wgs84ToSk63
 } from './coordinates'
+import type { BasemapId } from './coordinates'
 import { registerSW } from 'virtual:pwa-register'
 
 type Mode = 'msk-sk' | 'sk-msk' | 'sk-wgs' | 'wgs-sk' | 'dms'
@@ -32,11 +34,26 @@ let id = 2
 let map: L.Map | undefined
 let markerLayer: L.LayerGroup | undefined
 let previousMapPointCount = 0
+// Which basemap is on screen decides the registration: the Esri imagery and the OSM
+// scheme sit about eight metres apart here, so the marker shift follows the basemap.
+let basemap: BasemapId = 'satellite'
 
 function number(value: string, title: string): number {
   const n = Number(value.trim().replace(',', '.').replace(/\s/g, ''))
   if (!Number.isFinite(n)) throw new Error(`${title}: укажите число`)
   return n
+}
+
+function signedMetres(value: number): string {
+  return `${value < 0 ? '−' : '+'}${Math.abs(value).toFixed(1).replace('.', ',')}`
+}
+
+function updateCalibrationLabel() {
+  const element = document.querySelector<HTMLSpanElement>('#map-calibration')
+  if (!element) return
+  const offset = mapCalibration[basemap]
+  const name = basemap === 'satellite' ? 'спутник Esri' : 'схема OSM'
+  element.textContent = `Привязка карты (${name}): X (север) ${signedMetres(offset.north)} м · Y (восток) ${signedMetres(offset.east)} м`
 }
 
 function convert(row: Row): Result {
@@ -67,11 +84,11 @@ function mapPoint(row: Row, rowNumber: number): MapPoint | undefined {
   if (!row.first.trim() || !row.second.trim()) return undefined
   if (mode === 'msk-sk') {
     const point = { x: number(row.first, labels[mode].first), y: number(row.second, labels[mode].second) }
-    return { ...drawingToMapWgs84(point, 'msk42'), row: rowNumber }
+    return { ...drawingToMapWgs84(point, 'msk42', basemap), row: rowNumber }
   }
   if (mode === 'sk-msk' || mode === 'sk-wgs') {
     const point = { x: number(row.first, labels[mode].first), y: number(row.second, labels[mode].second) }
-    return { ...drawingToMapWgs84(point, 'sk63'), row: rowNumber }
+    return { ...drawingToMapWgs84(point, 'sk63', basemap), row: rowNumber }
   }
   const lat = parseCoordinate(row.first, 'lat'), lon = parseCoordinate(row.second, 'lon')
   return { lat, lon, row: rowNumber }
@@ -116,10 +133,10 @@ function render() {
       <div class="table-scroll"><table><thead><tr><th>№</th><th>${info.first}</th><th>${info.second}</th><th>${info.out1}</th><th>${info.out2}</th><th></th></tr></thead><tbody>${resultRows}</tbody></table></div>
       <button id="add" class="add">＋ Добавить строку</button></section>
       <section class="map-panel panel" aria-label="Карта точек">
-        <div class="panel-head map-head"><div><h2>Точки на карте Севастополя</h2><p>Маркеры соответствуют заполненным строкам таблицы.</p></div><span class="map-calibration">Привязка карты: X (север) +0,2 м · Y (восток) +0,6 м</span></div>
-        <div id="map" role="application" aria-label="Интерактивная карта OpenStreetMap"></div>
+        <div class="panel-head map-head"><div><h2>Точки на карте Севастополя</h2><p>Маркеры соответствуют заполненным строкам таблицы.</p></div><span class="map-calibration" id="map-calibration"></span></div>
+        <div id="map" role="application" aria-label="Интерактивная карта Севастополя"></div>
         <p id="map-status" class="map-status" aria-live="polite">Нет заполненных точек.</p>
-        <p class="map-note">Привязка только для карты и не влияет на результаты конвертера. Величина измерена наложением чертежа «границы севастополя.dxf» (МСК-42) на береговую линию OSM в QGIS/PROJ и составляет десятые доли метра при разбросе около 2 м, то есть лежит в пределах точности самой подложки. Подложки загружаются из интернета; без сети вычисления работают, но карта может быть пустой.</p>
+        <p class="map-note">Привязка только для карты и не влияет на результаты конвертера, и она переключается вместе с подложкой, потому что подложки смещены друг относительно друга примерно на восемь метров. Для спутниковых снимков Esri сдвиг измерен в QGIS/GDAL по ортофотопланам МСК-42 «Севастополь»: 14 замеров по городу (пять точек на двух зумах и шесть случайных планшетов) дали одинаковое смещение с медианой +5,1 м восток и +6,0 м север, разброс около 1 м, без разворота и масштаба. Для схемы OSM сдвиг измерен наложением береговой линии чертежа «границы севастополя.dxf»: +0,6 м восток и +0,2 м север при разбросе около 2 м. Подложки загружаются из интернета; без сети вычисления работают, но карта может быть пустой.</p>
       </section>
       <section class="note"><h2>О методике</h2><p>Плоские координаты вычисляются в проекции Гаусса—Крюгера на эллипсоиде Красовского 1940. Для WGS-84 применяется 7-параметрическое преобразование Пулково-1942 → WGS-84 из исходной книги. Преобразования и маркеры рассчитываются в браузере; введённые координаты не отправляются. Для карты загружаются тайлы спутниковых снимков и подписей видимой области, поэтому серверы тайлов получают запросы о просматриваемом районе.</p><p><b>Автономный режим:</b> откройте сайт один раз в сети, затем выберите «Установить приложение» в браузере — конвертер и его формулы останутся доступны без интернета.</p></section>
     </main><footer>Версия 1.0 · Проверяйте результат на контрольных точках перед производственным применением.</footer>`
@@ -157,9 +174,17 @@ function setupMap() {
   satellite.addTo(map)
   overlay.addTo(map)
   L.control.layers({ 'Спутник': satellite, 'Схема OSM': scheme }, { 'Улицы и подписи': overlay }, { collapsed: false, position: 'topright' }).addTo(map)
+  // Switching the basemap switches the registration, so the markers are recomputed
+  // against whatever imagery is actually on screen.
+  map.on('baselayerchange', event => {
+    basemap = event.name === 'Схема OSM' ? 'scheme' : 'satellite'
+    updateCalibrationLabel()
+    updateMapMarkers()
+  })
 
   markerLayer = L.layerGroup().addTo(map)
   window.setTimeout(() => map?.invalidateSize(), 0)
+  updateCalibrationLabel()
   updateMapMarkers(true)
 }
 

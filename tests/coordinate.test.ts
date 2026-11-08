@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { drawingToMapWgs84, formatDms, geographicToGrid, mapCalibration, msk42ToSk63, parseCoordinate, sk63ToMsk42, sk63ToWgs84, wgs84ToSk63 } from '../src/coordinates.ts'
+import type { BasemapId } from '../src/coordinates.ts'
 
 function near(actual: number, expected: number, tolerance: number, name: string) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${name}: ${actual}; expected ${expected}; tolerance ${tolerance}`)
@@ -32,15 +33,30 @@ const skBack = wgs84ToSk63(wgs)
 near(skBack.x, 4920693.86, 0.002, 'WGS-84 → СК-63 X обратный')
 near(skBack.y, 4383242.615, 0.002, 'WGS-84 → СК-63 Y обратный')
 
-// Map-only registration: it must stay sub-metre and must be exactly reversible,
-// so removing it recovers the original drawing coordinate.
+// Map-only registration: it must be exactly reversible for every basemap, so removing
+// it recovers the original drawing coordinate, and it must never leak into the converter.
 const mapReference = { lat: 44.6166, lon: 33.5253 }
 const drawingGrid = wgs84ToSk63(mapReference)
-const registeredGrid = { x: drawingGrid.x - mapCalibration.north, y: drawingGrid.y - mapCalibration.east }
-const mapRecovered = drawingToMapWgs84(registeredGrid, 'sk63')
-near(mapRecovered.lat, mapReference.lat, 1e-8, 'Map registration latitude')
-near(mapRecovered.lon, mapReference.lon, 1e-8, 'Map registration longitude')
-assert.ok(Math.hypot(mapCalibration.east, mapCalibration.north) < 5, 'Map-only registration must stay sub-5-metre')
+for (const [name, offset] of Object.entries(mapCalibration)) {
+  const registeredGrid = { x: drawingGrid.x - offset.north, y: drawingGrid.y - offset.east }
+  const mapRecovered = drawingToMapWgs84(registeredGrid, 'sk63', name as BasemapId)
+  near(mapRecovered.lat, mapReference.lat, 1e-8, `Map registration latitude (${name})`)
+  near(mapRecovered.lon, mapReference.lon, 1e-8, `Map registration longitude (${name})`)
+}
+// The satellite shift is the one measured in QGIS/GDAL against the МСК-42 «Севастополь»
+// orthophoto mosaics: 14 sites across the city agreed on +5.1 m east and +6.0 m north.
+near(mapCalibration.satellite.east, 5.1, 0.3, 'Esri satellite registration east')
+near(mapCalibration.satellite.north, 6.0, 0.3, 'Esri satellite registration north')
+// The OSM scheme agrees with the drawing's own shoreline to well under a metre.
+assert.ok(Math.hypot(mapCalibration.scheme.east, mapCalibration.scheme.north) < 2, 'OSM scheme registration must stay sub-2-metre')
+// The two basemaps really are metres apart, which is why the shift follows the basemap.
+const satellitePoint = drawingToMapWgs84(drawingGrid, 'sk63', 'satellite')
+const schemePoint = drawingToMapWgs84(drawingGrid, 'sk63', 'scheme')
+const separation = Math.hypot(
+  (satellitePoint.lat - schemePoint.lat) * 111_320,
+  (satellitePoint.lon - schemePoint.lon) * 111_320 * Math.cos(mapReference.lat * Math.PI / 180)
+)
+near(separation, 7.3, 1.5, 'Basemaps are metres apart, so registration must follow the basemap')
 // The registration must not leak into the converter's own results.
 const unregistered = sk63ToWgs84(drawingGrid)
 near(unregistered.lat, mapReference.lat, 1e-8, 'Converter latitude unaffected by map registration')
